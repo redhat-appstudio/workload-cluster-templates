@@ -98,14 +98,6 @@ objects:
               secretName: ${NAME}
               optional: false
 - apiVersion: v1
-  kind: Secret
-  metadata:
-    name: ${NAME}-token
-    namespace: ${NAMESPACE}
-    annotations:
-      kubernetes.io/service-account.name: ${NAME}
-  type: kubernetes.io/service-account-token
-- apiVersion: v1
   kind: ServiceAccount
   metadata:
     name: ${NAME}
