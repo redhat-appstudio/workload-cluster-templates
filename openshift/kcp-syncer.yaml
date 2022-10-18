@@ -1,0 +1,122 @@
+---
+apiVersion: v1
+kind: Template
+metadata:
+    name: kcp-syncer-template
+objects:
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: ${NAME}
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: ${NAME}
+  subjects:
+  - kind: ServiceAccount
+    name: ${NAME}
+    namespace: ${NAMESPACE}
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    name: ${NAME}
+  rules:
+  - apiGroups:
+    - ""
+    resources:
+    - namespaces
+    verbs:
+    - "create"
+    - "list"
+    - "watch"
+    - "delete"
+  - apiGroups:
+    - "apiextensions.k8s.io"
+    resources:
+    - customresourcedefinitions
+    verbs:
+    - "get"
+    - "watch"
+    - "list"
+  - apiGroups:
+    - ""
+    resources:
+    - configmaps
+    - secrets
+    - serviceaccounts
+    verbs:
+    - "*"
+  - apiGroups:
+    - "apps"
+    resources:
+    - deployments
+    verbs:
+    - "*"
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: ${NAME}
+    namespace: ${NAMESPACE}
+  spec:
+    replicas: 1
+    strategy:
+      type: Recreate
+    selector:
+      matchLabels:
+        app: ${NAME}
+    template:
+      metadata:
+        labels:
+          app: ${NAME}
+      spec:
+        containers:
+        - name: kcp-syncer
+          command:
+          - /ko-app/syncer
+          args:
+          - --from-kubeconfig=/kcp/kubeconfig
+          - --sync-target-name=${SYNC_TARGET_NAME}
+          - --sync-target-uid=${SYNC_TARGET_UID}
+          - --from-cluster=${KCP_WORKSPACE}
+          - --resources=configmaps
+          - --resources=deployments.apps
+          - --resources=secrets
+          - --resources=serviceaccounts
+          - --qps=30
+          - --burst=20
+          image: ${IMAGE}
+          imagePullPolicy: IfNotPresent
+          terminationMessagePolicy: FallbackToLogsOnError
+          volumeMounts:
+          - name: kcp-config
+            mountPath: /kcp/
+            readOnly: true
+        serviceAccountName: ${NAME}
+        volumes:
+          - name: kcp-config
+            secret:
+              secretName: ${NAME}
+              optional: false
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: ${NAME}-token
+    namespace: ${NAMESPACE}
+    annotations:
+      kubernetes.io/service-account.name: ${NAME}
+  type: kubernetes.io/service-account-token
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: ${NAME}
+    namespace: ${NAMESPACE}
+parameters:
+  - name: IMAGE
+    value: ghcr.io/kcp-dev/kcp/syncer:release-0.9
+  - name: NAME
+    value: kcp-syncer
+  - name: NAMESPACE
+    value: kcp-syncer
+  - name: SYNC_TARGET_NAME
+  - name: SYNC_TARGET_UID
+  - name: KCP_WORKSPACE
